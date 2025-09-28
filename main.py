@@ -27,7 +27,7 @@ from bluetooth import (
     disconnect_from_robot,
     discover_robot_devices,
     is_bluetooth_available,
-    is_connected
+    is_connected,
 )
 
 # Uncomment below for mock Bluetooth (for testing without hardware)
@@ -56,6 +56,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Load OpenAI API key from key.txt file
 def load_api_key():
     """Load API key from key.txt file"""
@@ -66,54 +67,56 @@ def load_api_key():
         print("❌ key.txt file not found. Please create it with your API key.")
         return None
 
+
 API_KEY = load_api_key()
+
 
 # Setup logging to file
 def setup_file_logging():
     """Setup file logging for AI reasoning and robot instructions"""
     # Create logs directory
     os.makedirs("logs", exist_ok=True)
-    
+
     # Create formatters
     detailed_formatter = logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        "%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
-    
+
     # AI Analysis Logger
-    ai_logger = logging.getLogger('ai_analysis')
+    ai_logger = logging.getLogger("ai_analysis")
     ai_logger.setLevel(logging.INFO)
     ai_handler = RotatingFileHandler(
-        'logs/ai_analysis.log', 
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5
+        "logs/ai_analysis.log",
+        maxBytes=10 * 1024 * 1024,  # 10MB
+        backupCount=5,
     )
     ai_handler.setFormatter(detailed_formatter)
     ai_logger.addHandler(ai_handler)
-    
+
     # Robot Instructions Logger
-    robot_logger = logging.getLogger('robot_instructions')
+    robot_logger = logging.getLogger("robot_instructions")
     robot_logger.setLevel(logging.INFO)
     robot_handler = RotatingFileHandler(
-        'logs/robot_instructions.log', 
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5
+        "logs/robot_instructions.log",
+        maxBytes=10 * 1024 * 1024,  # 10MB
+        backupCount=5,
     )
     robot_handler.setFormatter(detailed_formatter)
     robot_logger.addHandler(robot_handler)
-    
+
     # System Events Logger
-    system_logger = logging.getLogger('system_events')
+    system_logger = logging.getLogger("system_events")
     system_logger.setLevel(logging.INFO)
     system_handler = RotatingFileHandler(
-        'logs/system_events.log', 
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5
+        "logs/system_events.log",
+        maxBytes=10 * 1024 * 1024,  # 10MB
+        backupCount=5,
     )
     system_handler.setFormatter(detailed_formatter)
     system_logger.addHandler(system_handler)
-    
+
     return ai_logger, robot_logger, system_logger
+
 
 # Initialize file loggers
 ai_logger, robot_logger, system_logger = setup_file_logging()
@@ -173,14 +176,14 @@ def parse_robot_instruction(analysis: str) -> Optional[dict]:
     """Extract robot instruction in the specific JSON format: {'left_wheel': 30, 'right_wheel': 20, 'duration': 2}"""
     import re
     import json
-    
+
     # Look for JSON-like patterns in the analysis
     json_patterns = [
-        r'\{[^}]*left_wheel[^}]*right_wheel[^}]*duration[^}]*\}',
+        r"\{[^}]*left_wheel[^}]*right_wheel[^}]*duration[^}]*\}",
         r'\{[^}]*"left_wheel"[^}]*"right_wheel"[^}]*"duration"[^}]*\}',
-        r'left_wheel[:\s]*(-?\d+)[,\s]*right_wheel[:\s]*(-?\d+)[,\s]*duration[:\s]*(\d+)',
+        r"left_wheel[:\s]*(-?\d+)[,\s]*right_wheel[:\s]*(-?\d+)[,\s]*duration[:\s]*(\d+)",
     ]
-    
+
     for pattern in json_patterns:
         matches = re.findall(pattern, analysis, re.IGNORECASE)
         for match in matches:
@@ -191,45 +194,53 @@ def parse_robot_instruction(analysis: str) -> Optional[dict]:
                     right_wheel = int(match[1])
                     duration = int(match[2])
                     return {
-                        'left_wheel': left_wheel,
-                        'right_wheel': right_wheel,
-                        'duration': duration
+                        "left_wheel": left_wheel,
+                        "right_wheel": right_wheel,
+                        "duration": duration,
                     }
                 else:
                     # Try to parse as JSON
                     instruction = json.loads(match)
-                    if all(key in instruction for key in ['left_wheel', 'right_wheel', 'duration']):
+                    if all(
+                        key in instruction
+                        for key in ["left_wheel", "right_wheel", "duration"]
+                    ):
                         return {
-                            'left_wheel': int(instruction['left_wheel']),
-                            'right_wheel': int(instruction['right_wheel']),
-                            'duration': int(instruction['duration'])
+                            "left_wheel": int(instruction["left_wheel"]),
+                            "right_wheel": int(instruction["right_wheel"]),
+                            "duration": int(instruction["duration"]),
                         }
             except (json.JSONDecodeError, ValueError, KeyError):
                 continue
-    
+
     # Look for simple movement commands and convert to JSON format
     analysis_lower = analysis.lower()
-    
+
     # Forward movement
-    if any(word in analysis_lower for word in ['move forward', 'go forward', 'advance']):
-        return {'left_wheel': 50, 'right_wheel': 50, 'duration': 2}
-    
+    if any(
+        word in analysis_lower for word in ["move forward", "go forward", "advance"]
+    ):
+        return {"left_wheel": 50, "right_wheel": 50, "duration": 2}
+
     # Backward movement
-    if any(word in analysis_lower for word in ['move back', 'go back', 'reverse', 'backward']):
-        return {'left_wheel': -50, 'right_wheel': -50, 'duration': 2}
-    
+    if any(
+        word in analysis_lower
+        for word in ["move back", "go back", "reverse", "backward"]
+    ):
+        return {"left_wheel": -50, "right_wheel": -50, "duration": 2}
+
     # Turn left
-    if any(word in analysis_lower for word in ['turn left', 'go left', 'left']):
-        return {'left_wheel': -30, 'right_wheel': 30, 'duration': 2}
-    
+    if any(word in analysis_lower for word in ["turn left", "go left", "left"]):
+        return {"left_wheel": -30, "right_wheel": 30, "duration": 2}
+
     # Turn right
-    if any(word in analysis_lower for word in ['turn right', 'go right', 'right']):
-        return {'left_wheel': 30, 'right_wheel': -30, 'duration': 2}
-    
+    if any(word in analysis_lower for word in ["turn right", "go right", "right"]):
+        return {"left_wheel": 30, "right_wheel": -30, "duration": 2}
+
     # Stop
-    if any(word in analysis_lower for word in ['stop', 'halt', 'pause']):
-        return {'left_wheel': 0, 'right_wheel': 0, 'duration': 1}
-    
+    if any(word in analysis_lower for word in ["stop", "halt", "pause"]):
+        return {"left_wheel": 0, "right_wheel": 0, "duration": 1}
+
     return None
 
 
@@ -246,7 +257,7 @@ async def execute_robot_instruction(
         return False
 
     # Validate instruction format
-    required_keys = ['left_wheel', 'right_wheel', 'duration']
+    required_keys = ["left_wheel", "right_wheel", "duration"]
     if not all(key in instruction_dict for key in required_keys):
         logging.warning(f"Invalid instruction format: {instruction_dict}")
         return False
@@ -277,7 +288,7 @@ async def execute_robot_instruction(
         robot_logger.info(f"Status: SUCCESS")
         robot_logger.info(f"Method: Bluetooth")
         robot_logger.info(f"================================")
-        
+
         # Log the execution
         execution_log = {
             "timestamp": datetime.now().isoformat(),
@@ -308,7 +319,7 @@ async def execute_robot_instruction(
         robot_logger.error(f"Status: FAILED")
         robot_logger.error(f"Method: Bluetooth")
         robot_logger.error(f"=============================")
-        
+
         logging.error(f"Failed to execute robot instruction: {instruction_dict}")
         return False
 
@@ -319,7 +330,7 @@ async def analyze_multi_image_context(user_message: str = None) -> str:
     try:
         if not image_sequence:
             return "No images available for analysis"
-        
+
         # Prepare multi-image messages for Qwen3-VL
         messages = [
             {
@@ -354,47 +365,45 @@ async def analyze_multi_image_context(user_message: str = None) -> str:
                 - Move backward: {"left_wheel": -50, "right_wheel": -50, "duration": 2}
                 - Stop: {"left_wheel": 0, "right_wheel": 0, "duration": 1}
                 
-                Provide detailed analysis and include the robot instruction JSON when movement is needed."""
+                Provide detailed analysis and include the robot instruction JSON when movement is needed.""",
             }
         ]
-        
+
         # Add user message if provided
         if user_message:
-            messages.append({
-                "role": "user", 
-                "content": user_message
-            })
-        
+            messages.append({"role": "user", "content": user_message})
+
         # Add multi-image content
         image_content = []
         for i, img_path in enumerate(image_sequence):
             if os.path.exists(img_path):
                 with open(img_path, "rb") as image_file:
                     base64_image = base64.b64encode(image_file.read()).decode("utf-8")
-                    image_content.append({
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
-                    })
-        
+                    image_content.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            },
+                        }
+                    )
+
         if image_content:
-            messages.append({
-                "role": "user",
-                "content": image_content
-            })
-        
+            messages.append({"role": "user", "content": image_content})
+
         # Add chat history context
         for msg in chat_history[-6:]:
             messages.insert(-1, msg)
-        
-        client = openai.AsyncOpenAI(api_key=API_KEY,
-        base_url="https://openrouter.ai/api/v1")
-        response = await client.chat.completions.create(
-            model="qwen/qwen3-vl-235b-a22b-thinking",
-            messages=messages, max_tokens=800
+
+        client = openai.AsyncOpenAI(
+            api_key=API_KEY, base_url="https://openrouter.ai/api/v1"
         )
-        
+        response = await client.chat.completions.create(
+            model="qwen/qwen3-vl-235b-a22b-thinking", messages=messages, max_tokens=800
+        )
+
         analysis = response.choices[0].message.content
-        
+
         # Log AI analysis to file
         ai_logger.info(f"=== AI ANALYSIS ===")
         ai_logger.info(f"User Message: {user_message or 'Image analysis request'}")
@@ -402,10 +411,12 @@ async def analyze_multi_image_context(user_message: str = None) -> str:
         ai_logger.info(f"Image paths: {image_sequence}")
         ai_logger.info(f"AI Response: {analysis}")
         ai_logger.info(f"==================")
-        
+
         # Add analysis to chat history
-        chat_history.append({"role": "assistant", "content": f"Multi-image analysis: {analysis}"})
-        
+        chat_history.append(
+            {"role": "assistant", "content": f"Multi-image analysis: {analysis}"}
+        )
+
         return analysis
     except Exception as e:
         return f"Error in multi-image analysis: {str(e)}"
@@ -415,7 +426,9 @@ async def analyze_image_with_openai(image_path: str, user_message: str = None) -
     """Analyze image using multi-image context analysis"""
     try:
         # Use multi-image context analysis for all image analysis
-        analysis = await analyze_multi_image_context(user_message or "Analyze the latest image and provide robot instructions")
+        analysis = await analyze_multi_image_context(
+            user_message or "Analyze the latest image and provide robot instructions"
+        )
 
         # Auto-execute instruction if enabled
         if auto_execute_instructions:
@@ -494,17 +507,17 @@ async def upload_image(request: Request, background_tasks: BackgroundTasks):
     data = await request.body()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"robot_image_{timestamp}.jpg"
-    
+
     # Create images directory if it doesn't exist
     os.makedirs("images", exist_ok=True)
-    
+
     # Save the image in the images subdirectory
     image_path = os.path.join("images", filename)
     with open(image_path, "wb") as buffer:
         buffer.write(data)
 
     current_image_path = image_path
-    
+
     # Add to image sequence for multi-image analysis
     image_sequence.append(image_path)
     if len(image_sequence) > max_image_context:
@@ -593,7 +606,9 @@ async def send_instruction_to_robot(request: Request):
 
     # Send instruction via Bluetooth as JSON string
     # instruction_json = json.dumps(instruction)
-    success = await send_robot_instruction(instruction= instruction, instruction_type= instruction_type)
+    success = await send_robot_instruction(
+        instruction=instruction, instruction_type=instruction_type
+    )
 
     if success:
         # Log manual instruction to file
@@ -603,7 +618,7 @@ async def send_instruction_to_robot(request: Request):
         robot_logger.info(f"Status: SUCCESS")
         robot_logger.info(f"Method: Bluetooth")
         robot_logger.info(f"==============================")
-        
+
         # Add to instruction queue for tracking
         await instruction_queue.put(
             {
@@ -636,7 +651,7 @@ async def send_instruction_to_robot(request: Request):
         robot_logger.error(f"Status: FAILED")
         robot_logger.error(f"Method: Bluetooth")
         robot_logger.error(f"===================================")
-        
+
         return {"error": "Failed to send instruction via Bluetooth"}
 
 
@@ -652,42 +667,44 @@ async def get_chat_history():
     return {"chat_history": chat_history}
 
 
-
-
 @app.post("/complex_instruction/")
 async def start_complex_instruction(request: Request):
     """Start a complex multi-step instruction that requires agentic behavior"""
     global active_instruction_chain, instruction_step
-    
+
     data = await request.json()
     instruction = data.get("instruction", "")
-    
+
     if not instruction:
         return {"error": "No instruction provided"}
-    
+
     # Set up complex instruction tracking
     active_instruction_chain = {
         "instruction": instruction,
         "start_time": datetime.now().isoformat(),
         "steps": [],
-        "status": "active"
+        "status": "active",
     }
     instruction_step = 0
-    
+
     # Analyze current context with the complex instruction
-    analysis = await analyze_multi_image_context(f"Complex instruction: {instruction}. What should be the first step?")
-    
+    analysis = await analyze_multi_image_context(
+        f"Complex instruction: {instruction}. What should be the first step?"
+    )
+
     # Broadcast to clients
-    await broadcast_to_clients({
-        "type": "complex_instruction_started",
-        "instruction": instruction,
-        "first_analysis": analysis
-    })
-    
+    await broadcast_to_clients(
+        {
+            "type": "complex_instruction_started",
+            "instruction": instruction,
+            "first_analysis": analysis,
+        }
+    )
+
     return {
         "status": "complex_instruction_started",
         "instruction": instruction,
-        "analysis": analysis
+        "analysis": analysis,
     }
 
 
@@ -697,7 +714,7 @@ async def get_instruction_status():
     return {
         "active_instruction": active_instruction_chain,
         "current_step": instruction_step,
-        "image_sequence_length": len(image_sequence)
+        "image_sequence_length": len(image_sequence),
     }
 
 
@@ -767,7 +784,7 @@ async def connect_bluetooth(request: Request):
         system_logger.info(f"MAC Address: {mac_address}")
         system_logger.info(f"Status: SUCCESS")
         system_logger.info(f"========================")
-        
+
         await broadcast_to_clients(
             {"type": "bluetooth_connected", "mac_address": mac_address}
         )
@@ -777,7 +794,7 @@ async def connect_bluetooth(request: Request):
         system_logger.error(f"MAC Address: {mac_address}")
         system_logger.error(f"Status: FAILED")
         system_logger.error(f"===============================")
-        
+
         return {"error": "Failed to connect to robot"}
 
 
@@ -845,8 +862,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_text(
                     json.dumps({"type": "image_analysis", "analysis": analysis})
                 )
-            
-            
+
             elif message.get("type") == "complex_instruction":
                 instruction = message.get("instruction", "")
                 if instruction:
@@ -856,13 +872,21 @@ async def websocket_endpoint(websocket: WebSocket):
                         "instruction": instruction,
                         "start_time": datetime.now().isoformat(),
                         "steps": [],
-                        "status": "active"
+                        "status": "active",
                     }
                     instruction_step = 0
-                    
-                    analysis = await analyze_multi_image_context(f"Complex instruction: {instruction}. What should be the first step?")
+
+                    analysis = await analyze_multi_image_context(
+                        f"Complex instruction: {instruction}. What should be the first step?"
+                    )
                     await websocket.send_text(
-                        json.dumps({"type": "complex_instruction_started", "instruction": instruction, "analysis": analysis})
+                        json.dumps(
+                            {
+                                "type": "complex_instruction_started",
+                                "instruction": instruction,
+                                "analysis": analysis,
+                            }
+                        )
                     )
 
             elif message.get("type") == "bluetooth_status":
@@ -899,6 +923,7 @@ async def get_image(filename: str):
         return FileResponse(filename, media_type="image/jpeg")
     else:
         return {"error": "Image not found"}
+
 
 @app.get("/", response_class=HTMLResponse)
 async def get_index():
