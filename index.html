@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Control Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .chat-container {
+            height: 400px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            background-color: #fafafa;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .user-message {
+            background-color: #e3f2fd;
+            text-align: right;
+        }
+        .ai-message {
+            background-color: #f3e5f5;
+        }
+        .system-message {
+            background-color: #fff3e0;
+            font-style: italic;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #1976d2;
+        }
+        .image-panel {
+            text-align: center;
+        }
+        .current-image {
+            max-width: 100%;
+            max-height: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .instructions {
+            background-color: #e8f5e8;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+        .status.success {
+            background-color: #c8e6c9;
+        }
+        .status.error {
+            background-color: #ffcdd2;
+        }
+        .status.info {
+            background-color: #bbdefb;
+        }
+    </style>
+</head>
+<body>
+    <h1>🤖 Robot Control Interface</h1>
+    
+    <div class="container">
+        <div class="panel">
+            <h2>💬 Chat with AI</h2>
+            <div id="chatContainer" class="chat-container"></div>
+            <div class="input-group">
+                <input type="text" id="messageInput" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+            <div class="input-group" style="margin-top: 10px;">
+                <input type="text" id="imagePrompt" placeholder="Ask about the current image...">
+                <button onclick="analyzeImage()">Analyze Image</button>
+            </div>
+        </div>
+        
+        <div class="panel image-panel">
+            <h2>📸 Current Image</h2>
+            <img id="currentImage" class="current-image" src="" alt="No image received yet">
+            <div id="imageStatus" class="status info">Waiting for robot image...</div>
+            
+            <h3>🎯 AI Analysis</h3>
+            <div id="analysisResult" class="instructions">No analysis yet</div>
+            
+            <h3>📡 Bluetooth Connection</h3>
+            <div id="bluetoothStatus" class="status info">Checking Bluetooth status...</div>
+            <div class="input-group">
+                <input type="text" id="macAddressInput" placeholder="Robot MAC address (e.g., 00:11:22:33:44:55)">
+                <button onclick="connectBluetooth()">Connect</button>
+                <button onclick="disconnectBluetooth()">Disconnect</button>
+            </div>
+            <button onclick="discoverDevices()" style="margin-top: 10px;">Discover Devices</button>
+            <div id="discoveredDevices" style="margin-top: 10px;"></div>
+            
+            <h3>⚙️ Auto-Execution Settings</h3>
+            <div style="margin: 10px 0;">
+                <label>
+                    <input type="checkbox" id="autoExecuteCheckbox" checked onchange="toggleAutoExecute()">
+                    Auto-execute AI instructions
+                </label>
+            </div>
+            <div style="margin: 10px 0;">
+                <label>
+                    <input type="checkbox" id="safetyModeCheckbox" checked onchange="toggleSafetyMode()">
+                    Safety mode (block dangerous commands)
+                </label>
+            </div>
+            
+            <h3>📤 Send Instruction to Robot</h3>
+            <div class="input-group">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                    <div>
+                        <label for="leftWheel">Left Wheel:</label>
+                        <input type="number" id="leftWheel" placeholder="0" min="-100" max="100" value="0">
+                    </div>
+                    <div>
+                        <label for="rightWheel">Right Wheel:</label>
+                        <input type="number" id="rightWheel" placeholder="0" min="-100" max="100" value="0">
+                    </div>
+                    <div>
+                        <label for="duration">Duration (s):</label>
+                        <input type="number" id="duration" placeholder="1" min="1" max="10" value="1">
+                    </div>
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <button onclick="sendInstruction()">Send via Bluetooth</button>
+                    <button onclick="sendPresetInstruction('forward')">Forward</button>
+                    <button onclick="sendPresetInstruction('backward')">Backward</button>
+                    <button onclick="sendPresetInstruction('left')">Turn Left</button>
+                    <button onclick="sendPresetInstruction('right')">Turn Right</button>
+                    <button onclick="sendPresetInstruction('stop')">Stop</button>
+                </div>
+                <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                    Format: left: 20 right: 30 duration: 2
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let currentImagePath = null;
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+            
+            ws.onopen = function() {
+                addMessage('system', 'Connected to robot server');
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            };
+            
+            ws.onclose = function() {
+                addMessage('system', 'Disconnected from server. Reconnecting...');
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+
+        function handleWebSocketMessage(data) {
+            switch(data.type) {
+                case 'image_received':
+                    document.getElementById('imageStatus').textContent = `Image received: ${data.filename}`;
+                    document.getElementById('imageStatus').className = 'status success';
+                    currentImagePath = data.filename;
+                    updateImageDisplay();
+                    break;
+                    
+                case 'image_analysis':
+                    document.getElementById('analysisResult').textContent = data.analysis;
+                    addMessage('ai', `Image Analysis: ${data.analysis}`);
+                    break;
+                    
+                case 'chat_response':
+                    addMessage('ai', data.response);
+                    break;
+                    
+                case 'instruction_sent':
+                    addMessage('system', `Instruction sent to robot via ${data.method || 'unknown'}: ${data.instruction}`);
+                    break;
+                    
+                case 'bluetooth_connected':
+                    document.getElementById('bluetoothStatus').textContent = `Connected to ${data.mac_address}`;
+                    document.getElementById('bluetoothStatus').className = 'status success';
+                    addMessage('system', `Bluetooth connected to ${data.mac_address}`);
+                    break;
+                    
+                case 'bluetooth_disconnected':
+                    document.getElementById('bluetoothStatus').textContent = 'Disconnected from robot';
+                    document.getElementById('bluetoothStatus').className = 'status error';
+                    addMessage('system', 'Bluetooth disconnected from robot');
+                    break;
+                    
+                case 'bluetooth_status':
+                    updateBluetoothStatus(data.status);
+                    break;
+                    
+                case 'bluetooth_devices':
+                    displayDiscoveredDevices(data.devices);
+                    break;
+                    
+                case 'instruction_queued':
+                    addMessage('system', `Instruction queued: ${data.instruction}`);
+                    break;
+                    
+                case 'instruction_executed':
+                    addMessage('system', `🤖 AUTO-EXECUTED: ${data.instruction} (from ${data.source})`);
+                    break;
+                    
+                case 'instruction_blocked':
+                    addMessage('system', `⚠️ BLOCKED: ${data.instruction} (${data.reason})`);
+                    break;
+                    
+                case 'settings_updated':
+                    addMessage('system', `Settings updated: Auto-execute=${data.auto_execute}, Safety=${data.safety_mode}`);
+                    break;
+                    
+                case 'error':
+                    addMessage('system', `Error: ${data.message}`);
+                    break;
+            }
+        }
+
+        function updateImageDisplay() {
+            if (currentImagePath) {
+                document.getElementById('currentImage').src = `/image/${currentImagePath}`;
+            }
+        }
+
+        function addMessage(type, content) {
+            const chatContainer = document.getElementById('chatContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+            messageDiv.textContent = content;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (message && ws) {
+                ws.send(JSON.stringify({
+                    type: 'chat',
+                    message: message
+                }));
+                addMessage('user', message);
+                input.value = '';
+            }
+        }
+
+        function analyzeImage() {
+            const input = document.getElementById('imagePrompt');
+            const prompt = input.value.trim();
+            
+            if (ws) {
+                ws.send(JSON.stringify({
+                    type: 'analyze_image',
+                    message: prompt || 'Analyze this image and tell me what the robot should do next.'
+                }));
+                addMessage('user', `Image analysis request: ${prompt || 'Analyze current image'}`);
+                input.value = '';
+            }
+        }
+
+        function sendInstruction() {
+            const leftWheel = document.getElementById('leftWheel').value;
+            const rightWheel = document.getElementById('rightWheel').value;
+            const duration = document.getElementById('duration').value;
+            
+            if (leftWheel === '' || rightWheel === '' || duration === '') {
+                addMessage('system', 'Please fill in all fields');
+                return;
+            }
+            
+            const instruction = {
+                left_wheel: parseInt(leftWheel),
+                right_wheel: parseInt(rightWheel),
+                duration: parseInt(duration)
+            };
+            
+            const instructionText = `left: ${leftWheel} right: ${rightWheel} duration: ${duration}`;
+            
+            fetch('/send_instruction/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ instruction: instruction })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'instruction_sent') {
+                    addMessage('system', `Instruction sent via ${data.method}: ${instructionText}`);
+                } else {
+                    addMessage('system', `Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                addMessage('system', `Error sending instruction: ${error}`);
+            });
+        }
+        
+        function sendPresetInstruction(type) {
+            let leftWheel, rightWheel, duration;
+            
+            switch(type) {
+                case 'forward':
+                    leftWheel = 50; rightWheel = 50; duration = 2;
+                    break;
+                case 'backward':
+                    leftWheel = -50; rightWheel = -50; duration = 2;
+                    break;
+                case 'left':
+                    leftWheel = -30; rightWheel = 30; duration = 2;
+                    break;
+                case 'right':
+                    leftWheel = 30; rightWheel = -30; duration = 2;
+                    break;
+                case 'stop':
+                    leftWheel = 0; rightWheel = 0; duration = 1;
+                    break;
+                default:
+                    return;
+            }
+            
+            // Update the input fields
+            document.getElementById('leftWheel').value = leftWheel;
+            document.getElementById('rightWheel').value = rightWheel;
+            document.getElementById('duration').value = duration;
+            
+            // Send the instruction
+            sendInstruction();
+        }
+
+        function connectBluetooth() {
+            const input = document.getElementById('macAddressInput');
+            const macAddress = input.value.trim();
+            
+            if (!macAddress) {
+                addMessage('system', 'Please enter a MAC address');
+                return;
+            }
+            
+            fetch('/bluetooth/connect/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ mac_address: macAddress })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'connected') {
+                    addMessage('system', `Connected to robot at ${macAddress}`);
+                } else {
+                    addMessage('system', `Connection failed: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                addMessage('system', `Error connecting: ${error}`);
+            });
+        }
+
+        function disconnectBluetooth() {
+            fetch('/bluetooth/disconnect/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                addMessage('system', 'Disconnected from robot');
+            })
+            .catch(error => {
+                addMessage('system', `Error disconnecting: ${error}`);
+            });
+        }
+
+        function discoverDevices() {
+            if (ws) {
+                ws.send(JSON.stringify({
+                    type: 'discover_devices'
+                }));
+            }
+        }
+
+        function updateBluetoothStatus(status) {
+            const statusElement = document.getElementById('bluetoothStatus');
+            
+            if (!status.bluetooth_available) {
+                statusElement.textContent = 'Bluetooth not available';
+                statusElement.className = 'status error';
+            } else if (status.connected) {
+                statusElement.textContent = `Connected to ${status.robot_address}`;
+                statusElement.className = 'status success';
+            } else {
+                statusElement.textContent = 'Not connected to robot';
+                statusElement.className = 'status info';
+            }
+        }
+
+        function displayDiscoveredDevices(devices) {
+            const container = document.getElementById('discoveredDevices');
+            
+            if (devices.length === 0) {
+                container.innerHTML = '<div class="status info">No devices found</div>';
+                return;
+            }
+            
+            let html = '<h4>Discovered Devices:</h4>';
+            devices.forEach(device => {
+                html += `<div style="margin: 5px 0; padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
+                    <strong>${device.name || 'Unknown'}</strong><br>
+                    <small>${device.address}</small>
+                    <button onclick="connectToDevice('${device.address}')" style="float: right; margin-top: -20px;">Connect</button>
+                </div>`;
+            });
+            
+            container.innerHTML = html;
+        }
+
+        function connectToDevice(macAddress) {
+            document.getElementById('macAddressInput').value = macAddress;
+            connectBluetooth();
+        }
+
+        function toggleAutoExecute() {
+            const enabled = document.getElementById('autoExecuteCheckbox').checked;
+            
+            fetch('/settings/auto_execute/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ enabled: enabled })
+            })
+            .then(response => response.json())
+            .then(data => {
+                addMessage('system', `Auto-execution ${enabled ? 'enabled' : 'disabled'}`);
+            })
+            .catch(error => {
+                addMessage('system', `Error updating settings: ${error}`);
+            });
+        }
+
+        function toggleSafetyMode() {
+            const enabled = document.getElementById('safetyModeCheckbox').checked;
+            
+            fetch('/settings/safety_mode/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ enabled: enabled })
+            })
+            .then(response => response.json())
+            .then(data => {
+                addMessage('system', `Safety mode ${enabled ? 'enabled' : 'disabled'}`);
+            })
+            .catch(error => {
+                addMessage('system', `Error updating settings: ${error}`);
+            });
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // Initialize
+        connectWebSocket();
+        
+        // Check Bluetooth status on page load
+        setTimeout(() => {
+            if (ws) {
+                ws.send(JSON.stringify({
+                    type: 'bluetooth_status'
+                }));
+            }
+        }, 1000);
+        
+        // Check for existing image on page load
+        fetch('/instructions/')
+            .then(response => response.json())
+            .then(data => {
+                if (data.instructions && data.instructions.length > 0) {
+                    const latest = data.instructions[data.instructions.length - 1];
+                    currentImagePath = latest.image_path;
+                    updateImageDisplay();
+                    document.getElementById('analysisResult').textContent = latest.analysis;
+                }
+            });
+            
+        // Load current settings
+        fetch('/settings/')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('autoExecuteCheckbox').checked = data.auto_execute_instructions;
+                document.getElementById('safetyModeCheckbox').checked = data.safety_mode;
+            });
+    </script>
+</body>
+</html>
