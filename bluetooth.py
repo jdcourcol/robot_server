@@ -1,8 +1,7 @@
 import asyncio
 import logging
-from typing import Optional, Callable
-import json
 from datetime import datetime
+from typing import Callable, Optional
 
 try:
     from bleak import BleakClient, BleakScanner

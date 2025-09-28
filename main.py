@@ -4,8 +4,9 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import List, Optional
+from logging.config import dictConfig
 from logging.handlers import RotatingFileHandler
+from typing import List, Optional
 
 import openai
 from fastapi import (
@@ -16,18 +17,18 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 # Use real Bluetooth with Bleak
 from bluetooth import (
     bluetooth_controller,
     connect_to_robot,
-    send_robot_instruction,
-    queue_robot_instruction,
     disconnect_from_robot,
     discover_robot_devices,
     is_bluetooth_available,
     is_connected,
+    queue_robot_instruction,
+    send_robot_instruction,
 )
 
 # Uncomment below for mock Bluetooth (for testing without hardware)
@@ -146,36 +147,10 @@ instruction_step = 0  # Current step in multi-step instruction
 # Instruction parsing and validation
 
 
-def is_safe_instruction(instruction: str) -> bool:
-    """Check if instruction is safe to execute automatically"""
-    if not safety_mode:
-        return True
-
-    dangerous_commands = [
-        "destroy",
-        "break",
-        "damage",
-        "harm",
-        "hurt",
-        "delete",
-        "remove permanently",
-        "force",
-        "push hard",
-    ]
-
-    instruction_lower = instruction.lower()
-
-    for dangerous in dangerous_commands:
-        if dangerous in instruction_lower:
-            return False
-
-    return True
-
-
 def parse_robot_instruction(analysis: str) -> Optional[dict]:
     """Extract robot instruction in the specific JSON format: {'left_wheel': 30, 'right_wheel': 20, 'duration': 2}"""
-    import re
     import json
+    import re
 
     # Look for JSON-like patterns in the analysis
     json_patterns = [
@@ -262,32 +237,19 @@ async def execute_robot_instruction(
         logging.warning(f"Invalid instruction format: {instruction_dict}")
         return False
 
-    # Validate instruction safety
-    instruction_str = f"left_wheel: {instruction_dict['left_wheel']}, right_wheel: {instruction_dict['right_wheel']}, duration: {instruction_dict['duration']}"
-    if not is_safe_instruction(instruction_str):
-        logging.warning(f"Unsafe instruction blocked: {instruction_str}")
-        await broadcast_to_clients(
-            {
-                "type": "instruction_blocked",
-                "instruction": instruction_str,
-                "reason": "safety_check_failed",
-            }
-        )
-        return False
-
     # Send instruction to robot as JSON string
     instruction_json = json.dumps(instruction_dict)
     success = await send_robot_instruction(instruction_json, "auto_command")
 
     if success:
         # Log the execution to file
-        robot_logger.info(f"=== ROBOT INSTRUCTION EXECUTED ===")
+        robot_logger.info("=== ROBOT INSTRUCTION EXECUTED ===")
         robot_logger.info(f"Source: {source}")
         robot_logger.info(f"Instruction JSON: {instruction_json}")
         robot_logger.info(f"Parsed Instruction: {instruction_dict}")
-        robot_logger.info(f"Status: SUCCESS")
-        robot_logger.info(f"Method: Bluetooth")
-        robot_logger.info(f"================================")
+        robot_logger.info("Status: SUCCESS")
+        robot_logger.info("Method: Bluetooth")
+        robot_logger.info("================================")
 
         # Log the execution
         execution_log = {
@@ -312,13 +274,13 @@ async def execute_robot_instruction(
         return True
     else:
         # Log failed execution
-        robot_logger.error(f"=== ROBOT INSTRUCTION FAILED ===")
+        robot_logger.error("=== ROBOT INSTRUCTION FAILED ===")
         robot_logger.error(f"Source: {source}")
         robot_logger.error(f"Instruction JSON: {instruction_json}")
         robot_logger.error(f"Parsed Instruction: {instruction_dict}")
-        robot_logger.error(f"Status: FAILED")
-        robot_logger.error(f"Method: Bluetooth")
-        robot_logger.error(f"=============================")
+        robot_logger.error("Status: FAILED")
+        robot_logger.error("Method: Bluetooth")
+        robot_logger.error("=============================")
 
         logging.error(f"Failed to execute robot instruction: {instruction_dict}")
         return False
@@ -405,12 +367,12 @@ async def analyze_multi_image_context(user_message: str = None) -> str:
         analysis = response.choices[0].message.content
 
         # Log AI analysis to file
-        ai_logger.info(f"=== AI ANALYSIS ===")
+        ai_logger.info("=== AI ANALYSIS ===")
         ai_logger.info(f"User Message: {user_message or 'Image analysis request'}")
         ai_logger.info(f"Images in sequence: {len(image_sequence)}")
         ai_logger.info(f"Image paths: {image_sequence}")
         ai_logger.info(f"AI Response: {analysis}")
-        ai_logger.info(f"==================")
+        ai_logger.info("==================")
 
         # Add analysis to chat history
         chat_history.append(
@@ -472,7 +434,6 @@ async def broadcast_to_clients(message: dict):
             active_connections.remove(connection)
 
 
-from logging.config import dictConfig
 
 sample_logger = {
     "version": 1,
@@ -524,11 +485,11 @@ async def upload_image(request: Request, background_tasks: BackgroundTasks):
         image_sequence.pop(0)  # Remove oldest image
 
     # Log image received event
-    system_logger.info(f"=== IMAGE RECEIVED ===")
+    system_logger.info("=== IMAGE RECEIVED ===")
     system_logger.info(f"Filename: {filename}")
     system_logger.info(f"Path: {image_path}")
     system_logger.info(f"Image sequence length: {len(image_sequence)}")
-    system_logger.info(f"====================")
+    system_logger.info("====================")
 
     # Analyze image with OpenAI in background
     background_tasks.add_task(process_image_with_ai, image_path)
@@ -596,10 +557,6 @@ async def send_instruction_to_robot(request: Request):
     if not instruction:
         return {"error": "No instruction provided"}
 
-    # Check if instruction is in correct format
-    # if not isinstance(instruction, dict) or not all(key in instruction for key in ['left_wheel', 'right_wheel', 'duration']):
-    #     return {"error": "Instruction must be in format: {'left_wheel': 30, 'right_wheel': 20, 'duration': 2}"}
-
     # Check Bluetooth connection
     if not is_connected():
         return {"error": "Not connected to robot via Bluetooth"}
@@ -612,11 +569,11 @@ async def send_instruction_to_robot(request: Request):
 
     if success:
         # Log manual instruction to file
-        robot_logger.info(f"=== MANUAL ROBOT INSTRUCTION ===")
+        robot_logger.info("=== MANUAL ROBOT INSTRUCTION ===")
         robot_logger.info(f"Type: {instruction_type}")
         robot_logger.info(f"Instruction: {instruction}")
-        robot_logger.info(f"Status: SUCCESS")
-        robot_logger.info(f"Method: Bluetooth")
+        robot_logger.info("Status: SUCCESS")
+        robot_logger.info("Method: Bluetooth")
         robot_logger.info(f"==============================")
 
         # Add to instruction queue for tracking
@@ -645,12 +602,12 @@ async def send_instruction_to_robot(request: Request):
         }
     else:
         # Log failed manual instruction
-        robot_logger.error(f"=== MANUAL ROBOT INSTRUCTION FAILED ===")
+        robot_logger.error("=== MANUAL ROBOT INSTRUCTION FAILED ===")
         robot_logger.error(f"Type: {instruction_type}")
         robot_logger.error(f"Instruction: {instruction}")
-        robot_logger.error(f"Status: FAILED")
-        robot_logger.error(f"Method: Bluetooth")
-        robot_logger.error(f"===================================")
+        robot_logger.error("Status: FAILED")
+        robot_logger.error("Method: Bluetooth")
+        robot_logger.error("===================================")
 
         return {"error": "Failed to send instruction via Bluetooth"}
 
@@ -780,20 +737,20 @@ async def connect_bluetooth(request: Request):
     success = await connect_to_robot(mac_address)
 
     if success:
-        system_logger.info(f"=== BLUETOOTH CONNECTED ===")
+        system_logger.info("=== BLUETOOTH CONNECTED ===")
         system_logger.info(f"MAC Address: {mac_address}")
-        system_logger.info(f"Status: SUCCESS")
-        system_logger.info(f"========================")
+        system_logger.info("Status: SUCCESS")
+        system_logger.info("========================")
 
         await broadcast_to_clients(
             {"type": "bluetooth_connected", "mac_address": mac_address}
         )
         return {"status": "connected", "mac_address": mac_address}
     else:
-        system_logger.error(f"=== BLUETOOTH CONNECTION FAILED ===")
+        system_logger.error("=== BLUETOOTH CONNECTION FAILED ===")
         system_logger.error(f"MAC Address: {mac_address}")
-        system_logger.error(f"Status: FAILED")
-        system_logger.error(f"===============================")
+        system_logger.error("Status: FAILED")
+        system_logger.error("===============================")
 
         return {"error": "Failed to connect to robot"}
 
@@ -803,9 +760,9 @@ async def disconnect_bluetooth():
     """Disconnect from robot"""
     await disconnect_from_robot()
 
-    system_logger.info(f"=== BLUETOOTH DISCONNECTED ===")
-    system_logger.info(f"Status: SUCCESS")
-    system_logger.info(f"============================")
+    system_logger.info("=== BLUETOOTH DISCONNECTED ===")
+    system_logger.info("Status: SUCCESS")
+    system_logger.info("============================")
 
     await broadcast_to_clients({"type": "bluetooth_disconnected"})
 
