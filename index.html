@@ -138,20 +138,6 @@
             <button onclick="discoverDevices()" style="margin-top: 10px;">Discover Devices</button>
             <div id="discoveredDevices" style="margin-top: 10px;"></div>
             
-            <h3>⚙️ Auto-Execution Settings</h3>
-            <div style="margin: 10px 0;">
-                <label>
-                    <input type="checkbox" id="autoExecuteCheckbox" checked onchange="toggleAutoExecute()">
-                    Auto-execute AI instructions
-                </label>
-            </div>
-            <div style="margin: 10px 0;">
-                <label>
-                    <input type="checkbox" id="safetyModeCheckbox" checked onchange="toggleSafetyMode()">
-                    Safety mode (block dangerous commands)
-                </label>
-            </div>
-            
             <h3>📤 Send Instruction to Robot</h3>
             <div class="input-group">
                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px;">
@@ -260,9 +246,6 @@
                     addMessage('system', `⚠️ BLOCKED: ${data.instruction} (${data.reason})`);
                     break;
                     
-                case 'settings_updated':
-                    addMessage('system', `Settings updated: Auto-execute=${data.auto_execute}, Safety=${data.safety_mode}`);
-                    break;
                     
                 case 'error':
                     addMessage('system', `Error: ${data.message}`);
@@ -476,43 +459,6 @@
             connectBluetooth();
         }
 
-        function toggleAutoExecute() {
-            const enabled = document.getElementById('autoExecuteCheckbox').checked;
-            
-            fetch('/settings/auto_execute/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ enabled: enabled })
-            })
-            .then(response => response.json())
-            .then(data => {
-                addMessage('system', `Auto-execution ${enabled ? 'enabled' : 'disabled'}`);
-            })
-            .catch(error => {
-                addMessage('system', `Error updating settings: ${error}`);
-            });
-        }
-
-        function toggleSafetyMode() {
-            const enabled = document.getElementById('safetyModeCheckbox').checked;
-            
-            fetch('/settings/safety_mode/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ enabled: enabled })
-            })
-            .then(response => response.json())
-            .then(data => {
-                addMessage('system', `Safety mode ${enabled ? 'enabled' : 'disabled'}`);
-            })
-            .catch(error => {
-                addMessage('system', `Error updating settings: ${error}`);
-            });
-        }
 
         function handleKeyPress(event) {
             if (event.key === 'Enter') {
@@ -542,14 +488,6 @@
                     updateImageDisplay();
                     document.getElementById('analysisResult').textContent = latest.analysis;
                 }
-            });
-            
-        // Load current settings
-        fetch('/settings/')
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('autoExecuteCheckbox').checked = data.auto_execute_instructions;
-                document.getElementById('safetyModeCheckbox').checked = data.safety_mode;
             });
     </script>
 </body>
