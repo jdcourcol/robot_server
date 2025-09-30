@@ -20,7 +20,14 @@ class BluetoothRobotController:
         self.connected = False
         self.message_queue = asyncio.Queue()
         self.callbacks = []
+        self.writable_char_uuid = None  # Cache the writable characteristic UUID
         
+    def _on_disconnect(self, client):
+        """Callback when BLE device disconnects"""
+        logging.warning(f"⚠️  Robot disconnected unexpectedly! Client: {client.address if hasattr(client, 'address') else 'unknown'}")
+        self.connected = False
+        self.writable_char_uuid = None
+    
     async def discover_devices(self) -> list:
         """Discover nearby Bluetooth devices"""
         if not BLUETOOTH_AVAILABLE:
@@ -45,11 +52,51 @@ class BluetoothRobotController:
             return False
             
         try:
-            self.client = BleakClient(target_address)
+            # Create client with disconnect callback
+            self.client = BleakClient(target_address, disconnected_callback=self._on_disconnect)
             await self.client.connect()
             
-            # Services are automatically discovered in modern Bleak
-            logging.info("Connected successfully, services will be available after connection")
+            # Explicitly get services (required in some Bleak versions)
+            logging.info("Connected, discovering services...")
+            try:
+                # In modern Bleak, services are auto-discovered, but we wait for them
+                await asyncio.sleep(1)  # Give time for auto-discovery
+                
+                # Access services to ensure they're loaded
+                services = self.client.services
+                if not services:
+                    logging.error("No services found on device")
+                    await self.client.disconnect()
+                    return False
+                
+                # BleakGATTServiceCollection is iterable but not a list
+                service_list = list(services)
+                logging.info(f"Found {len(service_list)} services")
+                
+                # Cache the writable characteristic UUID for later use
+                self.writable_char_uuid = None
+                for service in service_list:
+                    logging.info(f"Service: {service.uuid}")
+                    for char in service.characteristics:
+                        logging.info(f"  Characteristic: {char.uuid}, Properties: {char.properties}")
+                        if "write" in char.properties or "write-without-response" in char.properties:
+                            self.writable_char_uuid = char.uuid
+                            logging.info(f"✓ Cached writable characteristic: {self.writable_char_uuid}")
+                            break
+                    if self.writable_char_uuid:
+                        break
+                
+                if not self.writable_char_uuid:
+                    logging.error("No writable characteristic found on device")
+                    await self.client.disconnect()
+                    return False
+                    
+            except Exception as e:
+                logging.error(f"Error during service discovery: {e}")
+                import traceback
+                logging.error(traceback.format_exc())
+                await self.client.disconnect()
+                return False
             
             self.connected = True
             self.robot_mac_address = target_address
@@ -72,15 +119,31 @@ class BluetoothRobotController:
             try:
                 await self.client.disconnect()
                 self.connected = False
+                self.writable_char_uuid = None  # Clear cached characteristic
                 logging.info("Disconnected from robot")
             except Exception as e:
                 logging.error(f"Error disconnecting: {e}")
     
     async def send_instruction(self, instruction, instruction_type: str = "command") -> bool:
         """Send instruction to robot via BLE characteristic in format: left: 20 right: 30 duration: 2"""
-        if not self.connected or not self.client:
-            logging.error("Not connected to robot")
-            return False
+        # Always check actual BLE connection state, not just our flag
+        if not self.client or not self.client.is_connected:
+            logging.warning(f"Not connected (client exists: {self.client is not None}, connected: {self.client.is_connected if self.client else False})")
+            
+            # Try to reconnect if we have a MAC address
+            if self.robot_mac_address:
+                logging.info(f"🔄 Attempting to reconnect to {self.robot_mac_address}...")
+                self.connected = False
+                self.writable_char_uuid = None
+                
+                success = await self.connect(self.robot_mac_address)
+                if not success:
+                    logging.error("❌ Failed to reconnect to robot")
+                    return False
+                logging.info("✅ Successfully reconnected to robot")
+            else:
+                logging.error("❌ Cannot reconnect - no MAC address stored")
+                return False
             
         try:
             # Convert instruction to simple text format
@@ -107,34 +170,47 @@ class BluetoothRobotController:
             else:
                 # If it's already a string, use it as is
                 message_str = str(instruction) + "\n"
-            print(f"Message string: {message_str}")
-            # Wait a moment for services to be available (they're auto-discovered in modern Bleak)
-            import asyncio
-            max_retries = 5
-            for attempt in range(max_retries):
-                if hasattr(self.client, 'services') and self.client.services:
-                    break
-                logging.info(f"Waiting for services to be available... (attempt {attempt + 1}/{max_retries})")
-                await asyncio.sleep(0.5)
+            logging.info(f"Preparing to send: {message_str.strip()}")
+            logging.info(f"Connection status - connected flag: {self.connected}, client.is_connected: {self.client.is_connected if self.client else 'N/A'}")
             
-            # Try to find a writable characteristic using the correct Bleak API
-            services = self.client.services
-            for service in services:
-                for char in service.characteristics:
-                    if "write" in char.properties:
-                        await self.client.write_gatt_char(char.uuid, message_str.encode())
-                        logging.info(f"Sent instruction to robot: {message_str.strip()}")
-                        
-                        # Notify callbacks
-                        for callback in self.callbacks:
-                            try:
-                                await callback("instruction_sent", message_str.strip())
-                            except Exception as e:
-                                logging.error(f"Callback error: {e}")
-                        
-                        return True
+            # Use cached characteristic if available
+            if self.writable_char_uuid:
+                try:
+                    logging.info(f"Using cached characteristic: {self.writable_char_uuid}")
+                    await self.client.write_gatt_char(self.writable_char_uuid, message_str.encode(), response=False)
+                    logging.info(f"✓ Successfully sent instruction: {message_str.strip()}")
+                    
+                    # Verify connection is still alive after send
+                    if not self.client.is_connected:
+                        logging.warning("⚠️  Connection dropped after sending instruction")
+                        self.connected = False
+                        self.writable_char_uuid = None
+                    
+                    # Notify callbacks
+                    for callback in self.callbacks:
+                        try:
+                            await callback("instruction_sent", message_str.strip())
+                        except Exception as e:
+                            logging.error(f"Callback error: {e}")
+                    
+                    return True
+                except Exception as e:
+                    logging.error(f"Failed to send using cached characteristic: {e}")
+                    logging.error(f"Characteristic UUID was: {self.writable_char_uuid}")
+                    logging.error(f"Client connected: {self.client.is_connected if self.client else 'No client'}")
+                    
+                    # If connection was lost, mark as disconnected
+                    if self.client and not self.client.is_connected:
+                        logging.error("Connection was lost during send attempt")
+                        self.connected = False
+                        self.writable_char_uuid = None
+                    
+                    # Fall through to error
+                    return False
             
-            logging.error("No writable characteristic found")
+            # Fallback: characteristic cache failed, should not happen
+            logging.error("Characteristic cache was not available or failed")
+            logging.error("This should not happen - please reconnect to the robot")
             return False
             
         except Exception as e:
@@ -148,25 +224,21 @@ class BluetoothRobotController:
             return False
             
         try:
-            # Wait a moment for services to be available (they're auto-discovered in modern Bleak)
-            import asyncio
-            max_retries = 5
-            for attempt in range(max_retries):
-                if hasattr(self.client, 'services') and self.client.services:
-                    break
-                logging.info(f"Waiting for services to be available... (attempt {attempt + 1}/{max_retries})")
-                await asyncio.sleep(0.5)
+            # Use cached characteristic if available
+            if self.writable_char_uuid:
+                try:
+                    logging.info(f"Sending raw command using cached characteristic: {self.writable_char_uuid}")
+                    await self.client.write_gatt_char(self.writable_char_uuid, command.encode() + b"\n", response=False)
+                    logging.info(f"✓ Successfully sent raw command: {command}")
+                    return True
+                except Exception as e:
+                    logging.error(f"Failed to send raw command using cached characteristic: {e}")
+                    logging.error(f"Characteristic UUID was: {self.writable_char_uuid}")
+                    return False
             
-            # Try to find a writable characteristic
-            services = self.client.services
-            for service in services:
-                for char in service.characteristics:
-                    if "write" in char.properties:
-                        await self.client.write_gatt_char(char.uuid, command.encode() + b"\n")
-                        logging.info(f"Sent raw command: {command}")
-                        return True
-            
-            logging.error("No writable characteristic found")
+            # Fallback: characteristic cache not available
+            logging.error("Characteristic cache was not available")
+            logging.error("This should not happen - please reconnect to the robot")
             return False
         except Exception as e:
             logging.error(f"Failed to send raw command: {e}")
